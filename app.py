@@ -10,22 +10,23 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- 구글 시트 연결 설정 ---
+# --- 구글 시트 연결 (Secrets 설정을 기반으로 함) ---
+# 이 부분에서 에러가 난다면 Secrets의 URL 설정을 확인해야 합니다.
 conn = st.connection("gsheets", type=GSheetsConnection)
 
 def get_data():
-    # 구글 시트의 'orders' 탭에서 데이터를 읽어옵니다.
+    # 'orders'는 구글 시트 하단 탭 이름과 일치해야 합니다.
     return conn.read(worksheet="orders", ttl="0")
 
-# --- 스타일링 (체크박스 강조 및 디자인) ---
+# --- 스타일링 ---
 st.markdown("""
     <style>
-    div[data-testid="stCheckbox"] { transform: scale(1.2); margin-left: 5px; }
+    div[data-testid="stCheckbox"] { transform: scale(1.3); }
     .header-style { font-weight: bold; color: #495057; background-color: #e9ecef; padding: 5px; border-radius: 5px; text-align: center; }
     </style>
     """, unsafe_allow_html=True)
 
-# 기초 데이터 로드 (직원 및 메뉴는 CSV에서 읽음)
+# 기초 데이터 로드 (기존 CSV 파일 활용)
 @st.cache_data
 def load_base_data():
     staff_df = pd.read_csv('staff.csv')
@@ -35,10 +36,12 @@ def load_base_data():
 staff_df, menu_df = load_base_data()
 today_str = datetime.date.today().strftime('%Y-%m-%d')
 
-# 메뉴 리셋 함수
+# 메뉴 초기화 로직
+if "menu_selection" not in st.session_state:
+    st.session_state.menu_selection = []
+
 def reset_on_change():
-    if "menu_selection" in st.session_state:
-        st.session_state.menu_selection = []
+    st.session_state.menu_selection = []
 
 # 메인 타이틀
 st.title('🍱 인천생활과학고 "밥먹고 초근하자"')
@@ -47,12 +50,8 @@ tab1, tab2, tab3 = st.tabs(["🍴 맛있는 주문", "📋 관리자 데스크",
 
 # --- [Tab 1: 주문하기] ---
 with tab1:
-    st.markdown("""
-    <div style="background-color: #f0f2f6; padding: 15px; border-radius: 10px; border-left: 5px solid #4CAF50; margin-bottom: 20px;">
-        💡 <b>성함과 메뉴를 확인 후 [주문 확정]을 눌러주세요.</b> 수정/삭제는 교무기획부로 문의 바랍니다.
-    </div>
-    """, unsafe_allow_html=True)
-
+    st.info("💡 부서 -> 이름 -> 식당 순서로 선택해 주세요.")
+    
     col1, col2, col3 = st.columns(3)
     with col1:
         depts = ["--- 부서 선택 ---"] + sorted(staff_df['department'].unique().tolist())
@@ -82,32 +81,38 @@ with tab1:
             total_price = sum([int(s.split('(')[1].replace('원)', '').replace(',', '')) for s in selected_display])
             pure_items = [s.split(' (')[0] for s in selected_display]
 
-            st.warning(f"⚠️ **{user_name}** 선생님, 선택하신 메뉴가 맞나요? 아래 버튼을 눌러야 주문이 완료됩니다.")
+            st.warning(f"⚠️ **{user_name}** 선생님, 아래 버튼을 눌러야 주문이 확정됩니다!")
             
-            if st.button("🚀 주문 확정하기 (클릭!)", type="primary", use_container_width=True):
-                # 기존 데이터 가져오기
-                existing_data = get_data()
-                new_id = len(existing_data) + 1
+            if st.button("🚀 주문 확정하기", type="primary", use_container_width=True):
+                # 구글 시트에서 기존 데이터 읽기
+                df = get_data()
                 
-                # 새 주문 데이터 행 생성
-                new_row = pd.DataFrame([{
-                    "id": new_id, "order_date": today_str, "department": dept, "user_name": user_name,
-                    "restaurant": selected_res, "items": ", ".join(pure_items), "total_price": total_price,
-                    "delivery_fee": 0, "over_price": 0, "status": "주문대기", "batch_id": ""
-                }])
+                # 새 행 데이터 생성
+                new_row = {
+                    "id": len(df) + 1,
+                    "order_date": today_str,
+                    "department": dept,
+                    "user_name": user_name,
+                    "restaurant": selected_res,
+                    "items": ", ".join(pure_items),
+                    "total_price": total_price,
+                    "delivery_fee": 0,
+                    "over_price": 0,
+                    "status": "주문대기",
+                    "batch_id": ""
+                }
                 
-                # 시트 업데이트
-                updated_df = pd.concat([existing_data, new_row], ignore_index=True)
+                # 데이터 추가 및 시트 업데이트
+                updated_df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
                 conn.update(worksheet="orders", data=updated_df)
                 
-                st.success(f"🎉 접수 완료! 내역: {', '.join(pure_items)} ({total_price:,}원)")
-                st.info("💡 수정/삭제는 교무기획부에 말씀해 주세요.")
+                st.success(f"🎉 접수 완료! ({total_price:,}원)")
                 st.balloons()
-                st.button("🔄 확인 (새 주문 화면으로)", on_click=lambda: st.session_state.clear())
+                st.button("🔄 다음 사람 주문하기", on_click=lambda: st.rerun())
 
 # --- [Tab 2: 관리자 데스크] ---
 with tab2:
-    st.header("👨‍💻 관리자 주문 취합")
+    st.header("👨‍💻 관리자 취합")
     all_data = get_data()
     today_data = all_data[all_data['order_date'] == today_str]
     
@@ -118,38 +123,19 @@ with tab2:
         if not pending.empty:
             for res in pending['restaurant'].unique():
                 res_orders = pending[pending['restaurant'] == res]
-                with st.expander(f"📍 {res} (대기 {len(res_orders)}건)", expanded=True):
-                    # 배달비 계산 (선생님 기존 로직 동일)
-                    food_sum = res_orders['total_price'].sum()
-                    d_fee = 4000 if res != '장강' else 0
-                    if res == '오르드브' and food_sum >= 50000: d_fee = 0
-                    
-                    st.write(f"음식 합계: {food_sum:,}원 | 배달비: {d_fee:,}원")
-                    
+                with st.expander(f"📍 {res} 대기 현황", expanded=True):
                     to_confirm = []
                     for idx, row in res_orders.iterrows():
-                        col = st.columns([0.1, 0.2, 0.2, 0.4, 0.1])
-                        if col[0].checkbox("", key=f"chk_{row['id']}"):
+                        if st.checkbox(f"{row['user_name']} - {row['items']} ({row['total_price']:,}원)", key=f"c_{row['id']}"):
                             to_confirm.append(row['id'])
-                        col[1].write(row['department'])
-                        col[2].write(row['user_name'])
-                        col[3].write(row['items'])
-                        col[4].write(f"{row['total_price']:,}")
                     
-                    if st.button(f"✅ {res} 선택 주문 확정", key=f"btn_{res}"):
-                        if to_confirm:
-                            all_data.loc[all_data['id'].isin(to_confirm), 'status'] = '주문완료'
-                            all_data.loc[all_data['id'].isin(to_confirm), 'batch_id'] = f"{res}_확정"
-                            conn.update(worksheet="orders", data=all_data)
-                            st.rerun()
-
-        # 확정 내역 표시
-        done = today_data[today_data['status'] == '주문완료']
-        if not done.empty:
-            st.subheader("✅ 확정 완료 명단")
-            st.dataframe(done[['batch_id', 'user_name', 'items', 'total_price']], hide_index=True)
+                    if st.button(f"✅ {res} 확정", key=f"b_{res}"):
+                        all_data.loc[all_data['id'].isin(to_confirm), 'status'] = '주문완료'
+                        all_data.loc[all_data['id'].isin(to_confirm), 'batch_id'] = f"{res}_완료"
+                        conn.update(worksheet="orders", data=all_data)
+                        st.rerun()
 
 # --- [Tab 3: 지난 기록] ---
 with tab3:
-    st.subheader("📜 누적 주문 기록")
-    st.dataframe(all_data, hide_index=True)
+    st.subheader("📜 전체 주문 데이터")
+    st.dataframe(get_data(), use_container_width=True, hide_index=True)
