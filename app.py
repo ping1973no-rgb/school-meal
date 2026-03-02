@@ -51,6 +51,47 @@ def get_db_connection():
     conn.row_factory = sqlite3.Row
     return conn
 
+# 🔥 서버에 접속할 때마다 DB와 테이블이 있는지 확인하고 없으면 자동으로 만드는 함수
+def init_db_if_not_exists():
+    conn = get_db_connection()
+    # 1. 주문 테이블(orders) 생성
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_date TEXT,
+            department TEXT,
+            user_name TEXT,
+            restaurant TEXT,
+            items TEXT,
+            total_price INTEGER,
+            delivery_fee INTEGER DEFAULT 0,
+            over_price INTEGER DEFAULT 0,
+            status TEXT DEFAULT '주문대기',
+            batch_id TEXT
+        )
+    ''')
+    
+    # 2. 교직원 명단(staff) 테이블 자동 생성 (staff.csv 기준)
+    try:
+        conn.execute("SELECT 1 FROM staff LIMIT 1")
+    except sqlite3.OperationalError:
+        df_staff = pd.read_csv('staff.csv')
+        df_staff.to_sql('staff', conn, index=False)
+        
+    # 3. 메뉴판(menu) 테이블 자동 생성 (menu.csv 기준)
+    try:
+        conn.execute("SELECT 1 FROM menu LIMIT 1")
+    except sqlite3.OperationalError:
+        df_menu = pd.read_csv('menu.csv')
+        df_menu.to_sql('menu', conn, index=False)
+        
+    conn.commit()
+    conn.close()
+
+# 🚀 [매우 중요] 앱이 실행될 때 위 함수를 실제로 작동시킵니다.
+init_db_if_not_exists()
+
+# --- 여기서부터는 기존 코드와 동일 ---
 today = datetime.date.today()
 today_str = today.strftime('%Y-%m-%d')
 
@@ -335,4 +376,5 @@ with tab3:
         total_sum = sum([h['total_price'] for h in history])
         st.metric("총 결제 금액", f"{total_sum:,}원")
     else: st.warning("기록이 없습니다.")
+
     conn.close()
