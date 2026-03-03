@@ -58,7 +58,7 @@ tab1, tab2, tab3 = st.tabs(["🍴 맛있는 주문", "📋 관리자 데스크",
 
 # --- [Tab 1: 주문하기] ---
 with tab1:
-    st.info("💡 부서 → 이름 → 식당 순서로 선택 후 메뉴를 확정해 주세요. 16:40분에 일괄주문합니다.\n\n 메뉴확정 및 일괄 주문 후 수정이나 삭제는 식당에 문의해주세요.")
+    st.info("💡 부서 → 이름 → 식당 순서로 선택 후 메뉴를 확정해 주세요. 16:40분에 일괄주문합니다.\n\n💡 메뉴확정 및 일괄 주문 후 수정이나 삭제는 식당에 문의해주세요.\n\n💡 식당은 오르드브(샌드위치, 샐러드), 아말피(김밥, 일반메뉴), 장강(중국식) 중 9,000원 이내 선택가능.\n\n💡 배달비(2,000원~4,000원)까지 고려해야함으로 단체주문이 이득")
     col1, col2, col3 = st.columns(3)
     with col1:
         dept = st.selectbox("🏢 부서 선택", ["--- 부서 선택 ---"] + sorted(staff_df['department'].unique().tolist()))
@@ -172,3 +172,4 @@ with tab3:
         st.metric("총 결제 금액", f"{history['total_price'].sum() + history['delivery_fee'].sum():,}원")
     else:
         st.warning("기록이 없습니다.")
+
