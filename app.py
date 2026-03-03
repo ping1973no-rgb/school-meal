@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import datetime
+import time
 import os
 
 # --- 1. 데이터베이스 설정 ---
@@ -52,7 +53,9 @@ staff_df, menu_df = load_external_data()
 
 # --- 3. 앱 설정 및 스타일 ---
 st.set_page_config(page_title='인천생활과학고 "밥먹고 초근하자"', page_icon="🍱", layout="wide")
-today_str = datetime.date.today().strftime('%Y-%m-%d')
+now = datetime.datetime.now()
+today_str = now.strftime('%Y-%m-%d')
+current_time = now.strftime('%H:%M:%S')
 
 st.title('🍱 인천생활과학고 "밥먹고 초근하자"')
 st.markdown(f"### 📅 오늘은 **{today_str}** 입니다.")
@@ -233,6 +236,7 @@ with tab3:
     else:
         st.write("해당 날짜의 기록이 없습니다.")
     conn.close()
+
 
 
 
