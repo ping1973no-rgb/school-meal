@@ -1,55 +1,58 @@
 import streamlit as st
-from streamlit_gsheets import GSheetsConnection
 import pandas as pd
+import sqlite3
 import datetime
+import os
 
-# 1. 페이지 설정
-st.set_page_config(
-    page_title='인천생활과학고 "밥먹고 초근하자"',
-    page_icon="🍱",
-    layout="wide"
-)
+# --- 1. 데이터베이스 설정 ---
+DB_FILE = "delivery.db"
 
-# --- [중요] 구글 시트 연결 ---
-conn_gs = st.connection("gsheets", type=GSheetsConnection)
+def get_db_connection():
+    # 데이터베이스 파일 연결 (없으면 자동 생성)
+    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
+    return conn
 
-def get_db_data():
+def init_db():
+    """앱 실행 시 테이블이 없으면 생성"""
+    conn = get_db_connection()
+    cur = conn.cursor()
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS orders (
+            id TEXT PRIMARY KEY,
+            order_date TEXT,
+            department TEXT,
+            user_name TEXT,
+            restaurant TEXT,
+            items TEXT,
+            total_price INTEGER,
+            delivery_fee INTEGER DEFAULT 0,
+            over_price INTEGER DEFAULT 0,
+            status TEXT DEFAULT '주문대기',
+            batch_id TEXT DEFAULT ''
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+# 앱 시작 시 DB 초기화
+init_db()
+
+# --- 2. 외부 CSV 파일 로드 ---
+@st.cache_data
+def load_external_data():
     try:
-        df = conn_gs.read(worksheet="orders", ttl=0)
-        if df is None or df.empty:
-            return pd.DataFrame(columns=['id', 'order_date', 'department', 'user_name', 'restaurant', 'items', 'total_price', 'delivery_fee', 'over_price', 'status', 'batch_id'])
-        df = df.astype(str).apply(lambda x: x.str.strip())
-        df['order_date'] = pd.to_datetime(df['order_date']).dt.strftime('%Y-%m-%d')
-        num_cols = ['total_price', 'delivery_fee', 'over_price']
-        for col in num_cols:
-            df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0).astype(int)
-        return df
-    except:
-        return pd.DataFrame(columns=['id', 'order_date', 'department', 'user_name', 'restaurant', 'items', 'total_price', 'delivery_fee', 'over_price', 'status', 'batch_id'])
+        staff = pd.read_csv('staff.csv')
+        menu = pd.read_csv('menu.csv')
+        return staff, menu
+    except FileNotFoundError:
+        st.error("🚨 staff.csv 또는 menu.csv 파일이 없습니다. 파일을 업로드해 주세요.")
+        return pd.DataFrame(columns=['name', 'department']), pd.DataFrame(columns=['restaurant', 'item_name', 'price'])
 
-# --- 스타일링 수정 (체크박스 정렬 보정) ---
-st.markdown("""
-    <style>
-    .stAlert { padding: 15px; border-radius: 10px; }
-    .stButton>button { border-radius: 10px; font-weight: bold; }
-    .stExpander { border: none; box-shadow: 0 2px 8px rgba(0,0,0,0.08); border-radius: 10px; margin-bottom: 20px; }
-    
-    /* 체크박스와 텍스트 수직 정렬 보정 */
-    div[data-testid="stHorizontalBlock"] {
-        align-items: center;
-        background-color: #ffffff;
-        padding: 5px 10px;
-        border-bottom: 1px solid #eee;
-    }
-    .header-style { font-weight: bold; color: #495057; background-color: #f1f3f5; padding: 8px; border-radius: 5px; text-align: center; margin-bottom: 5px; }
-    </style>
-    """, unsafe_allow_html=True)
+staff_df, menu_df = load_external_data()
 
-staff_df = pd.read_csv('staff.csv')
-menu_df = pd.read_csv('menu.csv')
-
-today = datetime.date.today()
-today_str = today.strftime('%Y-%m-%d')
+# --- 3. 앱 설정 및 스타일 ---
+st.set_page_config(page_title='인천생활과학고 "밥먹고 초근하자"', page_icon="🍱", layout="wide")
+today_str = datetime.date.today().strftime('%Y-%m-%d')
 
 st.title('🍱 인천생활과학고 "밥먹고 초근하자"')
 st.markdown(f"### 📅 오늘은 **{today_str}** 입니다.")
@@ -58,7 +61,7 @@ tab1, tab2, tab3 = st.tabs(["🍴 맛있는 주문", "📋 관리자 데스크",
 
 # --- [Tab 1: 주문하기] ---
 with tab1:
-    st.info("💡 부서 → 이름 → 식당 순서로 선택 후 메뉴를 확정해 주세요. 16:40분에 일괄주문합니다.\n\n💡 메뉴확정 및 일괄 주문 후 수정이나 삭제는 식당에 문의해주세요.\n\n💡 식당은 오르드브(샌드위치, 샐러드), 아말피(김밥, 일반메뉴), 장강(중국식) 중 9,000원 이내 선택가능.\n\n💡 배달비(2,000원~4,000원)까지 고려해야함으로 단체주문이 이득")
+    st.info("💡 부서 → 이름 → 식당 순으로 선택 후 주문하세요. (SQLite DB 적용 중)")
     
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -75,175 +78,114 @@ with tab1:
         menu_options = [f"{row['item_name']} ({row['price']:,}원)" for _, row in res_menu.iterrows()]
         selected_display = st.multiselect("📝 메뉴 선택", menu_options)
         
-        # [수정 포인트] 아래 if문의 들여쓰기를 위 multiselect와 정확히 맞췄습니다.
         if selected_display and st.button("🚀 주문 확정하기", type="primary", use_container_width=True):
-            try:
-                import time # 시간 지연을 위해 추가
-                
-                # 1. 최신 데이터 읽기 (캐시 없이 강제 로드)
-                df = conn_gs.read(worksheet="orders", ttl=0)
-                
-                # 2. 새 행 생성
+            conn = get_db_connection()
+            # 중복 체크
+            existing = pd.read_sql("SELECT * FROM orders WHERE order_date=? AND user_name=?", conn, params=(today_str, user_name))
+            
+            if not existing.empty:
+                st.error("❌ 이미 오늘 주문하셨습니다!")
+            else:
                 total_food = sum([int(s.split('(')[1].replace('원)', '').replace(',', '')) for s in selected_display])
-                new_row = pd.DataFrame([{
-                    "id": str(datetime.datetime.now().timestamp()),
-                    "order_date": today_str, 
-                    "department": dept, 
-                    "user_name": user_name,
-                    "restaurant": selected_res, 
-                    "items": ", ".join([s.split(' (')[0] for s in selected_display]),
-                    "total_price": total_food, 
-                    "delivery_fee": 0, 
-                    "over_price": 0, 
-                    "status": "주문대기", 
-                    "batch_id": ""
-                }])
+                items_str = ", ".join([s.split(' (')[0] for s in selected_display])
+                order_id = str(datetime.datetime.now().timestamp())
                 
-                # 3. 데이터 합치기
-                updated_df = pd.concat([df, new_row], ignore_index=True)
-                
-                # 4. 구글 API 연속 요청 방지를 위한 대기
-                time.sleep(0.5)
-                
-                # 5. 시트 업데이트
-                conn_gs.update(worksheet="orders", data=updated_df)
-                
-                st.success(f"🎉 {user_name}님, 주문 완료!")
+                cur = conn.cursor()
+                cur.execute("INSERT INTO orders (id, order_date, department, user_name, restaurant, items, total_price) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                            (order_id, today_str, dept, user_name, selected_res, items_str, total_food))
+                conn.commit()
+                st.success("🎉 주문 완료! 메뉴가 초기화됩니다.")
                 st.balloons()
-                
-                # 6. 다음 사람을 위해 초기화
-                time.sleep(1)
                 st.rerun()
-
-            except Exception as e:
-                st.error("🚨 주문 처리 중 일시적인 오류가 발생했습니다.")
-                st.write(f"상세 원인: {e}")
-                st.info("💡 3초만 기다렸다가 다시 [주문 확정하기]를 눌러보세요.")
+            conn.close()
 
 # --- [Tab 2: 관리자 데스크] ---
 with tab2:
-    st.subheader(f"📊 {today_str} 주문 관리")
-    all_data = get_db_data()
-    today_data = all_data[all_data['order_date'] == today_str]
+    conn = get_db_connection()
+    today_data = pd.read_sql(f"SELECT * FROM orders WHERE order_date='{today_str}'", conn)
     
     if today_data.empty:
         st.info("오늘 접수된 주문이 없습니다.")
     else:
-        # 1. 미확정 대기 내역 처리 부분입니다.
         pending = today_data[today_data['status'] == '주문대기']
         if not pending.empty:
-            st.markdown("#### ⏳ 확정 대기 목록")
+            st.markdown("#### ⏳ 확정 대기 목록 (체크 후 확정하거나 삭제하세요)")
             for res in pending['restaurant'].unique():
                 res_orders = pending[pending['restaurant'] == res]
-                
-                # --- 이 아래부분의 들여쓰기를 눈으로 확인해 보세요! ---
                 with st.expander(f"📍 {res} (대기 {len(res_orders)}건)", expanded=True):
+                    # 배달비 로직
                     order_count = len(res_orders)
                     food_sum = res_orders['total_price'].sum()
-                    
-                    # 배달비 계산 로직
-                    if res == '아말피':
-                        d_fee = 3000 if order_count == 1 else 4000
-                    elif res == '오르드브':
-                        d_fee = 2000 if order_count == 1 else 4000
-                        if food_sum >= 50000: d_fee = 0
-                    elif res == '장강':
-                        d_fee = 0
-                    else:
-                        d_fee = 4000
-                    
+                    if res == '아말피': d_fee = 3000 if order_count == 1 else 4000
+                    elif res == '오르드브': d_fee = 2000 if order_count == 1 else 4000
+                    elif res == '장강': d_fee = 0
+                    else: d_fee = 4000
+                    if res == '오르드브' and food_sum >= 50000: d_fee = 0
                     per_fee = d_fee // order_count
-                    st.write(f"배달비 총 {d_fee:,}원 (1인당 {per_fee:,}원 분담)")
-                    # --- 이 위까지 들여쓰기가 일정해야 합니다 ---
                     
-                    st.write(f"배달비 총 {d_fee:,}원 (1인당 {per_fee:,}원)")
+                    st.write(f"💰 예상 배달비: 총 {d_fee:,}원 (1인당 {per_fee:,}원)")
                     
-                    # 체크박스를 포함한 주문 리스트 표 형태 구현
-                    h_col = st.columns([0.1, 0.2, 0.2, 0.3, 0.2])
-                    headers = ["선택", "부서", "성함", "메뉴", "음식값"]
-                    for col, text in zip(h_col, headers): col.markdown(f'<p class="header-style">{text}</p>', unsafe_allow_html=True)
-
-                    to_confirm = []
+                    to_action = []
                     for _, row in res_orders.iterrows():
-                        c = st.columns([0.1, 0.2, 0.2, 0.3, 0.2])
-                        if c[0].checkbox("", key=f"chk_{row['id']}"): to_confirm.append(row['id'])
-                        c[1].write(row['department'])
-                        c[2].write(row['user_name'])
-                        c[3].write(row['items'])
-                        c[4].write(f"{row['total_price']:,}원")
+                        if st.checkbox(f"{row['user_name']} | {row['items']} ({row['total_price']:,}원)", key=f"chk_{row['id']}"):
+                            to_action.append(row['id'])
                     
-                    # --- [여기부터 수정] 버튼 두 개를 나란히 배치 ---
-                    btn_col1, btn_col2 = st.columns(2)
-                    
-                    with btn_col1:
-                        if st.button(f"✅ {res} 선택 항목 확정", key=f"confirm_{res}"):
-                            if to_confirm: # 선생님 코드의 변수명(to_confirm) 유지
-                                # 1. 차수 이름 결정
-                                done_batches = all_data[(all_data['order_date'] == today_str) & (all_data['status'] == '주문완료')]['batch_id'].unique()
-                                batch_name = f"{len(done_batches)+1}차({res})"
-                                
-                                # 2. 데이터 업데이트
-                                all_data.loc[all_data['id'].isin(to_confirm), ['status', 'batch_id', 'delivery_fee']] = ['주문완료', batch_name, per_fee]
-                                for tid in to_confirm:
-                                    idx = all_data.index[all_data['id'] == tid][0]
-                                    all_data.at[idx, 'over_price'] = max(0, (all_data.at[idx, 'total_price'] + per_fee) - 9000)
-                                
-                                conn_gs.update(worksheet="orders", data=all_data)
+                    b_col1, b_col2 = st.columns(2)
+                    with b_col1:
+                        if st.button(f"✅ {res} 선택 확정", key=f"conf_{res}"):
+                            if to_action:
+                                cur = conn.cursor()
+                                # 차수(batch_id) 계산
+                                done_batches = today_data[today_data['status']=='주문완료']['batch_id'].unique()
+                                b_id = f"{len(done_batches)+1}차({res})"
+                                for tid in to_action:
+                                    # 초과금 계산 (음식값+배달비 - 9000)
+                                    row_data = res_orders[res_orders['id'] == tid].iloc[0]
+                                    over = max(0, (row_data['total_price'] + per_fee) - 9000)
+                                    cur.execute("UPDATE orders SET status='주문완료', batch_id=?, delivery_fee=?, over_price=? WHERE id=?", (b_id, per_fee, over, tid))
+                                conn.commit()
                                 st.rerun()
-                            else:
-                                st.warning("선택된 항목이 없습니다.")
-
-                    with btn_col2:
-                        # 삭제 기능 추가
-                        if st.button(f"🗑️ {res} 선택 항목 삭제", key=f"del_{res}"):
-                            if to_confirm:
-                                # 삭제 로직: 선택된 ID만 데이터프레임에서 제외
-                                all_data = all_data[~all_data['id'].isin(to_confirm)]
-                                
-                                conn_gs.update(worksheet="orders", data=all_data)
-                                st.warning("선택한 항목이 삭제되었습니다.")
+                    with b_col2:
+                        if st.button(f"🗑️ {res} 선택 삭제", key=f"del_{res}"):
+                            if to_action:
+                                cur = conn.cursor()
+                                for tid in to_action:
+                                    cur.execute("DELETE FROM orders WHERE id=?", (tid,))
+                                conn.commit()
                                 st.rerun()
-                            else:
-                                st.warning("선택된 항목이 없습니다.")
 
-        # 2. [수정 요청사항] 오늘 확정 내역을 차수별로 표 분리
+        # 완료 내역 출력
         done = today_data[today_data['status'] == '주문완료']
         if not done.empty:
-            st.markdown("---")
-            st.subheader("✅ 오늘 확정 완료 내역 (차수별)")
+            st.divider()
+            st.subheader("✅ 오늘 주문 확정 내역")
             
-            # 차수(batch_id)별로 정렬하여 표를 따로 생성
-            for b_id in sorted(done['batch_id'].unique()):
-                b_df = done[done['batch_id'] == b_id]
-                b_food = b_df['total_price'].sum()
-                b_del = b_df['delivery_fee'].sum()
-                
-                # 차수별 박스 구성
+            # 차수(batch_id)별로 그룹을 지어 각각 표를 그려줍니다.
+            for batch in sorted(done['batch_id'].unique()):
                 with st.container():
-                    st.markdown(f"**📋 {b_id}** (합계: {b_food+b_del:,}원)")
-                    # 가독성을 위해 불필요한 컬럼은 제외하고 보여줌
-                    display_df = b_df[['department', 'user_name', 'items', 'total_price', 'delivery_fee', 'over_price']].copy()
-                    display_df.columns = ['부서', '이름', '메뉴', '음식값', '배달비', '초과금']
-                    st.table(display_df) # dataframe 대신 table을 써서 스크롤 없이 다 보이게 함
+                    st.markdown(f"#### 🏷️ {batch}") # 예: 1차(아말피), 2차(오르드브)
+                    batch_df = done[done['batch_id'] == batch]
+                    
+                    # 보기 좋게 열 순서와 이름 조정
+                    display_df = batch_df[['department', 'user_name', 'items', 'total_price', 'delivery_fee', 'over_price']]
+                    display_df.columns = ['부서', '성함', '메뉴', '음식값', '배달비', '개인부담금']
+                    
+                    st.table(display_df)
+                    
+                    # 차수별 합계 요약 (선택 사항)
+                    total_sum = batch_df['total_price'].sum() + batch_df['delivery_fee'].sum()
+                    st.caption(f"💰 {batch} 총결제액: {total_sum:,}원")
                     st.write("") # 간격 띄우기
+
+    conn.close()
 
 # --- [Tab 3: 지난 기록] ---
 with tab3:
-    st.header("📅 전체 기록 조회")
-    search_date = st.date_input("날짜 선택", today)
-    all_data_hist = get_db_data()
-    history = all_data_hist[(all_data_hist['order_date'] == search_date.strftime('%Y-%m-%d')) & (all_data_hist['status'] == '주문완료')]
-    
+    search_date = st.date_input("날짜 선택", datetime.date.today())
+    conn = get_db_connection()
+    history = pd.read_sql("SELECT * FROM orders WHERE order_date=? AND status='주문완료'", conn, params=(search_date.strftime('%Y-%m-%d'),))
     if not history.empty:
-        st.table(history[['batch_id', 'department', 'user_name', 'restaurant', 'items', 'total_price', 'delivery_fee', 'over_price']])
-        st.metric("총 결제 금액", f"{history['total_price'].sum() + history['delivery_fee'].sum():,}원")
+        st.table(history)
     else:
-        st.warning("기록이 없습니다.")
-
-
-
-
-
-
-
-
+        st.write("해당 날짜의 기록이 없습니다.")
+    conn.close()
