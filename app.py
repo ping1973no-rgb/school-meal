@@ -85,9 +85,15 @@ with tab1:
                     "restaurant": selected_res, "items": ", ".join([s.split(' (')[0] for s in selected_display]),
                     "total_price": total_food, "delivery_fee": 0, "over_price": 0, "status": "주문대기", "batch_id": ""
                 }])
+                # 데이터 전송
                 conn_gs.update(worksheet="orders", data=pd.concat([df, new_row], ignore_index=True))
-                st.success(f"🎉 {today_str} 주문 완료!")
+                
+                # 🎉 성공 메시지를 띄우고 화면을 초기화합니다.
+                st.success(f"🎉 주문이 완료되었습니다!")
                 st.balloons()
+                
+                # [핵심] 이 한 줄이 모든 선택 항목을 초기화(새로고침)합니다.
+                st.rerun()
 
 # --- [Tab 2: 관리자 데스크] ---
 with tab2:
@@ -208,6 +214,7 @@ with tab3:
         st.metric("총 결제 금액", f"{history['total_price'].sum() + history['delivery_fee'].sum():,}원")
     else:
         st.warning("기록이 없습니다.")
+
 
 
 
