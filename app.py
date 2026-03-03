@@ -5,75 +5,57 @@ import datetime
 import os
 import time
 
-# --- 1. 데이터베이스 설정 ---
-DB_FILE = "delivery.db"
+# --- 1. 앱 설정 (최상단 배치) ---
+st.set_page_config(page_title='인천생활과학고 "밥먹고 초근하자"', page_icon="🍱", layout="wide")
 
+# --- 2. 데이터 로드 (캐시 사용) ---
+@st.cache_data(ttl=600)  # 10분마다 새로고침
+def load_staff_data():
+    if os.path.exists('staff.csv'):
+        return pd.read_csv('staff.csv')
+    return pd.DataFrame(columns=['name', 'department'])
+
+@st.cache_data(ttl=600)
+def load_menu_data():
+    if os.path.exists('menu.csv'):
+        return pd.read_csv('menu.csv')
+    return pd.DataFrame(columns=['restaurant', 'item_name', 'price'])
+
+staff_df = load_staff_data()
+menu_df = load_menu_data()
+
+# --- 3. 날짜 계산 (캐시 함수 밖에서 실행!) ---
+# 이 부분이 함수 밖에 있어야 사용자가 접속할 때마다 새로 계산됩니다.
+now_korea = datetime.datetime.now() + datetime.timedelta(hours=9) # 서버가 해외에 있을 경우 한국 시간 보정
+today_str = now_korea.strftime('%Y-%m-%d')
+current_time = now_korea.strftime('%H:%M:%S')
+
+st.title('🍱 인천생활과학고 "밥먹고 초근하자"')
+
+# 날짜가 바뀌는지 확인하기 위해 현재 시각을 초 단위까지 노출합니다.
+st.info(f"📅 오늘은 **{today_str}** 입니다. (현재 시간: {current_time})")
+
+# --- 4. 데이터베이스 초기화 ---
+DB_FILE = "delivery.db"
 def get_db_connection():
-    # 데이터베이스 파일 연결
-    conn = sqlite3.connect(DB_FILE, check_same_thread=False)
-    return conn
+    return sqlite3.connect(DB_FILE, check_same_thread=False)
 
 def init_db():
-    """앱 실행 시 테이블이 없으면 생성"""
     conn = get_db_connection()
-    cur = conn.cursor()
-    cur.execute("""
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS orders (
-            id TEXT PRIMARY KEY,
-            order_date TEXT,
-            department TEXT,
-            user_name TEXT,
-            restaurant TEXT,
-            items TEXT,
-            total_price INTEGER,
-            delivery_fee INTEGER DEFAULT 0,
-            over_price INTEGER DEFAULT 0,
-            status TEXT DEFAULT '주문대기',
-            batch_id TEXT DEFAULT ''
+            id TEXT PRIMARY KEY, order_date TEXT, department TEXT, 
+            user_name TEXT, restaurant TEXT, items TEXT, 
+            total_price INTEGER, delivery_fee INTEGER DEFAULT 0, 
+            over_price INTEGER DEFAULT 0, status TEXT DEFAULT '주문대기', batch_id TEXT DEFAULT ''
         )
     """)
     conn.commit()
     conn.close()
 
-# 앱 시작 시 DB 초기화
 init_db()
 
-# --- 2. 외부 데이터 로드 (날짜와 분리하여 순수하게 파일만 읽음) ---
-@st.cache_data
-def load_staff_data():
-    try:
-        return pd.read_csv('staff.csv')
-    except:
-        return pd.DataFrame(columns=['name', 'department'])
-
-@st.cache_data
-def load_menu_data():
-    try:
-        return pd.read_csv('menu.csv')
-    except:
-        return pd.DataFrame(columns=['restaurant', 'item_name', 'price'])
-
-staff_df = load_staff_data()
-menu_df = load_menu_data()
-
-# --- 3. 앱 설정 및 '실시간' 날짜 갱신 ---
-st.set_page_config(page_title='인천생활과학고 "밥먹고 초근하자"', page_icon="🍱", layout="wide")
-
-# [핵심 수정] 함수 밖이 아니라, 앱이 실행될 때마다 이 라인을 새로 읽도록 함
-# datetime.datetime.now()를 써서 초 단위까지 확인하면 갱신 여부를 알기 쉽습니다.
-now = datetime.datetime.now()
-today_str = now.strftime('%Y-%m-%d')
-current_time = now.strftime('%H:%M:%S')
-
-st.title('🍱 인천생활과학고 "밥먹고 초근하자"')
-
-# 안내창에 날짜와 현재 시간을 함께 표시해서 갱신되는지 확인해보세요!
-st.info(f"📅 오늘은 **{today_str}** 입니다. (접속시간: {current_time})")
-
-# 16:30분 마감 체크용 변수 (나중에 주문 버튼에서 사용)
-cutoff_time = now.replace(hour=16, minute=30, second=0, microsecond=0)
-is_after_deadline = now > cutoff_time
-
+# 탭 구성 시작...
 tab1, tab2, tab3 = st.tabs(["🍴 맛있는 주문", "📋 관리자 데스크", "📜 지난 기록"])
 
 # --- [Tab 1: 주문하기] ---
@@ -249,6 +231,7 @@ with tab3:
     else:
         st.write("해당 날짜의 기록이 없습니다.")
     conn.close()
+
 
 
 
