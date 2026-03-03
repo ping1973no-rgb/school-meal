@@ -59,6 +59,7 @@ tab1, tab2, tab3 = st.tabs(["🍴 맛있는 주문", "📋 관리자 데스크",
 # --- [Tab 1: 주문하기] ---
 with tab1:
     st.info("💡 부서 → 이름 → 식당 순서로 선택 후 메뉴를 확정해 주세요. 16:40분에 일괄주문합니다.\n\n💡 메뉴확정 및 일괄 주문 후 수정이나 삭제는 식당에 문의해주세요.\n\n💡 식당은 오르드브(샌드위치, 샐러드), 아말피(김밥, 일반메뉴), 장강(중국식) 중 9,000원 이내 선택가능.\n\n💡 배달비(2,000원~4,000원)까지 고려해야함으로 단체주문이 이득")
+    
     col1, col2, col3 = st.columns(3)
     with col1:
         dept = st.selectbox("🏢 부서 선택", ["--- 부서 선택 ---"] + sorted(staff_df['department'].unique().tolist()))
@@ -74,7 +75,8 @@ with tab1:
         menu_options = [f"{row['item_name']} ({row['price']:,}원)" for _, row in res_menu.iterrows()]
         selected_display = st.multiselect("📝 메뉴 선택", menu_options)
         
-       if selected_display and st.button("🚀 주문 확정하기", type="primary", use_container_width=True):
+        # [수정 포인트] 아래 if문의 들여쓰기를 위 multiselect와 정확히 맞췄습니다.
+        if selected_display and st.button("🚀 주문 확정하기", type="primary", use_container_width=True):
             try:
                 import time # 시간 지연을 위해 추가
                 
@@ -100,8 +102,7 @@ with tab1:
                 # 3. 데이터 합치기
                 updated_df = pd.concat([df, new_row], ignore_index=True)
                 
-                # 4. [핵심 수정] 구글 시트 업데이트 전 아주 잠깐(0.5초) 대기
-                # 구글 API가 연속 요청을 거절하는 것을 방지합니다.
+                # 4. 구글 API 연속 요청 방지를 위한 대기
                 time.sleep(0.5)
                 
                 # 5. 시트 업데이트
@@ -110,7 +111,7 @@ with tab1:
                 st.success(f"🎉 {user_name}님, 주문 완료!")
                 st.balloons()
                 
-                # 6. 다음 사람을 위해 1초 대기 후 초기화
+                # 6. 다음 사람을 위해 초기화
                 time.sleep(1)
                 st.rerun()
 
@@ -238,6 +239,7 @@ with tab3:
         st.metric("총 결제 금액", f"{history['total_price'].sum() + history['delivery_fee'].sum():,}원")
     else:
         st.warning("기록이 없습니다.")
+
 
 
 
