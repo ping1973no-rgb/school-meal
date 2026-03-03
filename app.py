@@ -126,18 +126,39 @@ with tab2:
                         c[3].write(row['items'])
                         c[4].write(f"{row['total_price']:,}원")
                     
-                    if st.button(f"✅ {res} 주문 확정 및 차수 부여", key=f"btn_{res}"):
-                        if to_confirm:
-                            done_batches = all_data[(all_data['order_date'] == today_str) & (all_data['status'] == '주문완료')]['batch_id'].unique()
-                            batch_name = f"{len(done_batches)+1}차({res})"
-                            
-                            all_data.loc[all_data['id'].isin(to_confirm), ['status', 'batch_id', 'delivery_fee']] = ['주문완료', batch_name, per_fee]
-                            for tid in to_confirm:
-                                idx = all_data.index[all_data['id'] == tid][0]
-                                all_data.at[idx, 'over_price'] = max(0, (all_data.at[idx, 'total_price'] + per_fee) - 9000)
-                            
-                            conn_gs.update(worksheet="orders", data=all_data)
-                            st.rerun()
+                    # --- [여기부터 수정] 버튼 두 개를 나란히 배치 ---
+                    btn_col1, btn_col2 = st.columns(2)
+                    
+                    with btn_col1:
+                        if st.button(f"✅ {res} 선택 항목 확정", key=f"confirm_{res}"):
+                            if to_confirm: # 선생님 코드의 변수명(to_confirm) 유지
+                                # 1. 차수 이름 결정
+                                done_batches = all_data[(all_data['order_date'] == today_str) & (all_data['status'] == '주문완료')]['batch_id'].unique()
+                                batch_name = f"{len(done_batches)+1}차({res})"
+                                
+                                # 2. 데이터 업데이트
+                                all_data.loc[all_data['id'].isin(to_confirm), ['status', 'batch_id', 'delivery_fee']] = ['주문완료', batch_name, per_fee]
+                                for tid in to_confirm:
+                                    idx = all_data.index[all_data['id'] == tid][0]
+                                    all_data.at[idx, 'over_price'] = max(0, (all_data.at[idx, 'total_price'] + per_fee) - 9000)
+                                
+                                conn_gs.update(worksheet="orders", data=all_data)
+                                st.rerun()
+                            else:
+                                st.warning("선택된 항목이 없습니다.")
+
+                    with btn_col2:
+                        # 삭제 기능 추가
+                        if st.button(f"🗑️ {res} 선택 항목 삭제", key=f"del_{res}"):
+                            if to_confirm:
+                                # 삭제 로직: 선택된 ID만 데이터프레임에서 제외
+                                all_data = all_data[~all_data['id'].isin(to_confirm)]
+                                
+                                conn_gs.update(worksheet="orders", data=all_data)
+                                st.warning("선택한 항목이 삭제되었습니다.")
+                                st.rerun()
+                            else:
+                                st.warning("선택된 항목이 없습니다.")
 
         # 2. [수정 요청사항] 오늘 확정 내역을 차수별로 표 분리
         done = today_data[today_data['status'] == '주문완료']
@@ -172,4 +193,5 @@ with tab3:
         st.metric("총 결제 금액", f"{history['total_price'].sum() + history['delivery_fee'].sum():,}원")
     else:
         st.warning("기록이 없습니다.")
+
 
