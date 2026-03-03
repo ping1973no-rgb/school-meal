@@ -2,14 +2,14 @@ import streamlit as st
 import pandas as pd
 import sqlite3
 import datetime
-import time
 import os
+import time
 
 # --- 1. 데이터베이스 설정 ---
 DB_FILE = "delivery.db"
 
 def get_db_connection():
-    # 데이터베이스 파일 연결 (없으면 자동 생성)
+    # 데이터베이스 파일 연결
     conn = sqlite3.connect(DB_FILE, check_same_thread=False)
     return conn
 
@@ -38,31 +38,44 @@ def init_db():
 # 앱 시작 시 DB 초기화
 init_db()
 
-# --- 2. 외부 CSV 파일 로드 ---
+# --- 2. 외부 데이터 로드 (날짜와 분리하여 순수하게 파일만 읽음) ---
 @st.cache_data
-def load_external_data():
+def load_staff_data():
     try:
-        staff = pd.read_csv('staff.csv')
-        menu = pd.read_csv('menu.csv')
-        return staff, menu
-    except FileNotFoundError:
-        st.error("🚨 staff.csv 또는 menu.csv 파일이 없습니다. 파일을 업로드해 주세요.")
-        return pd.DataFrame(columns=['name', 'department']), pd.DataFrame(columns=['restaurant', 'item_name', 'price'])
+        return pd.read_csv('staff.csv')
+    except:
+        return pd.DataFrame(columns=['name', 'department'])
 
-staff_df, menu_df = load_external_data()
+@st.cache_data
+def load_menu_data():
+    try:
+        return pd.read_csv('menu.csv')
+    except:
+        return pd.DataFrame(columns=['restaurant', 'item_name', 'price'])
 
-# --- 3. 앱 설정 및 스타일 ---
+staff_df = load_staff_data()
+menu_df = load_menu_data()
+
+# --- 3. 앱 설정 및 '실시간' 날짜 갱신 ---
 st.set_page_config(page_title='인천생활과학고 "밥먹고 초근하자"', page_icon="🍱", layout="wide")
+
+# [핵심 수정] 함수 밖이 아니라, 앱이 실행될 때마다 이 라인을 새로 읽도록 함
+# datetime.datetime.now()를 써서 초 단위까지 확인하면 갱신 여부를 알기 쉽습니다.
 now = datetime.datetime.now()
 today_str = now.strftime('%Y-%m-%d')
 current_time = now.strftime('%H:%M:%S')
 
 st.title('🍱 인천생활과학고 "밥먹고 초근하자"')
-st.markdown(f"### 📅 오늘은 **{today_str}** 입니다.")
+
+# 안내창에 날짜와 현재 시간을 함께 표시해서 갱신되는지 확인해보세요!
+st.info(f"📅 오늘은 **{today_str}** 입니다. (접속시간: {current_time})")
+
+# 16:30분 마감 체크용 변수 (나중에 주문 버튼에서 사용)
+cutoff_time = now.replace(hour=16, minute=30, second=0, microsecond=0)
+is_after_deadline = now > cutoff_time
 
 tab1, tab2, tab3 = st.tabs(["🍴 맛있는 주문", "📋 관리자 데스크", "📜 지난 기록"])
 
-# --- [Tab 1: 주문하기] ---
 # --- [Tab 1: 주문하기] ---
 with tab1:
     if staff_df.empty or menu_df.empty:
@@ -236,6 +249,7 @@ with tab3:
     else:
         st.write("해당 날짜의 기록이 없습니다.")
     conn.close()
+
 
 
 
