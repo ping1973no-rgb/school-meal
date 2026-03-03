@@ -65,7 +65,7 @@ with tab1:
     if staff_df.empty or menu_df.empty:
         st.error("🚨 staff.csv 또는 menu.csv 파일을 찾을 수 없습니다. GitHub에 파일이 업로드되었는지 확인해주세요.")
     else:
-        st.info("💡 부서 → 이름 → 식당 순으로 선택 후 주문하세요.")
+        st.info("💡 부서 → 이름 → 식당 순으로 선택 후 주문하세요.\n\n 💡 매일 16:00시에 일괄주문합니다. 그외는 개별 주문\n\n 💡 초근신청 확인(1시간 이상 근무 하실분), 배송료 고려 1인 9,000원이내\n\n 💡배송료는 업체마다 다름. 단체주문 이득 ")
         
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -233,5 +233,6 @@ with tab3:
     else:
         st.write("해당 날짜의 기록이 없습니다.")
     conn.close()
+
 
 
