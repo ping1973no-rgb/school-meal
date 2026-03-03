@@ -130,61 +130,59 @@ with tab1:
 # --- [Tab 2: 관리자 데스크] ---
 with tab2:
     conn = get_db_connection()
-    today_data = pd.read_sql(f"SELECT * FROM orders WHERE order_date='{today_str}'", conn)
+    # 1. 오늘 날짜의 전체 데이터 읽기
+    today_data = pd.read_sql("SELECT * FROM orders WHERE order_date=?", conn, params=(today_str,))
     
     if today_data.empty:
         st.info("오늘 접수된 주문이 없습니다.")
     else:
+        # 2. 확정 대기 중인 주문 처리
         pending = today_data[today_data['status'] == '주문대기']
         if not pending.empty:
-            st.markdown("#### ⏳ 확정 대기 목록 (체크 후 확정하거나 삭제하세요)")
+            st.markdown("#### ⏳ 확정 대기 목록")
             for res in pending['restaurant'].unique():
                 res_orders = pending[pending['restaurant'] == res]
                 with st.expander(f"📍 {res} (대기 {len(res_orders)}건)", expanded=True):
-                    # 배달비 로직
                     order_count = len(res_orders)
                     food_sum = res_orders['total_price'].sum()
+                    
+                    # 배달비 로직 (아말피, 오르드브 등 식당별 조건)
                     if res == '아말피': d_fee = 3000 if order_count == 1 else 4000
                     elif res == '오르드브': d_fee = 2000 if order_count == 1 else 4000
                     elif res == '장강': d_fee = 0
                     else: d_fee = 4000
                     if res == '오르드브' and food_sum >= 50000: d_fee = 0
-                    per_fee = d_fee // order_count
                     
+                    per_fee = d_fee // order_count
                     st.write(f"💰 예상 배달비: 총 {d_fee:,}원 (1인당 {per_fee:,}원)")
                     
+                    # 선택된 주문 ID를 담을 리스트
                     to_action = []
                     for _, row in res_orders.iterrows():
                         if st.checkbox(f"{row['user_name']} | {row['items']} ({row['total_price']:,}원)", key=f"chk_{row['id']}"):
                             to_action.append(row['id'])
                     
-                    b_col1, b_col2 = st.columns(2)
-                    with b_col1:
-                       # --- Tab 2 내부 [✅ 선택 확정] 버튼 클릭 시 로직 ---
+                    # 확정 및 삭제 버튼
+                    col_b1, col_b2 = st.columns(2)
+                    with col_b1:
                         if st.button(f"✅ {res} 선택 확정", key=f"conf_{res}"):
                             if to_action:
                                 cur = conn.cursor()
+                                # 현재 완료된 차수 계산해서 다음 차수 이름 생성
                                 done_batches = today_data[today_data['status']=='주문완료']['batch_id'].unique()
                                 b_id = f"{len(done_batches)+1}차({res})"
                                 
                                 for tid in to_action:
-                                    # [수정 포인트] .item()을 사용하여 Series가 아닌 단일 정수값으로 가져옵니다.
+                                    # 단일 값 추출을 위해 .item() 사용
                                     selected_row = res_orders[res_orders['id'] == tid]
-                                    food_price = int(selected_row['total_price'].item()) # 이 부분!
-                                    
-                                    # 개인부담금 계산: (음식값 + 내 배달비) - 9000원 지원금
+                                    food_price = int(selected_row['total_price'].item())
+                                    # 개인부담금 계산 (지원금 9,000원 기준)
                                     over = max(0, (food_price + per_fee) - 9000)
-                                    
-                                    cur.execute("""
-                                        UPDATE orders 
-                                        SET status='주문완료', batch_id=?, delivery_fee=?, over_price=? 
-                                        WHERE id=?
-                                    """, (b_id, per_fee, int(over), tid)) # int로 한 번 더 감싸서 안전하게 저장
-                                    
+                                    cur.execute("UPDATE orders SET status='주문완료', batch_id=?, delivery_fee=?, over_price=? WHERE id=?", 
+                                                (b_id, per_fee, int(over), tid))
                                 conn.commit()
-                                st.success(f"{res} 확정 완료!")
                                 st.rerun()
-                    with b_col2:
+                    with col_b2:
                         if st.button(f"🗑️ {res} 선택 삭제", key=f"del_{res}"):
                             if to_action:
                                 cur = conn.cursor()
@@ -193,31 +191,38 @@ with tab2:
                                 conn.commit()
                                 st.rerun()
 
-        # 완료 내역 출력
+        # 3. 이미 확정된 내역 출력 (차수별로 분리)
         done = today_data[today_data['status'] == '주문완료']
         if not done.empty:
             st.divider()
             st.subheader("✅ 오늘 주문 확정 내역")
-            
-            # 차수(batch_id)별로 그룹을 지어 각각 표를 그려줍니다.
             for batch in sorted(done['batch_id'].unique()):
-                with st.container():
-                    st.markdown(f"#### 🏷️ {batch}") # 예: 1차(아말피), 2차(오르드브)
-                    batch_df = done[done['batch_id'] == batch]
-                    
-                    # 보기 좋게 열 순서와 이름 조정
-                    display_df = batch_df[['department', 'user_name', 'items', 'total_price', 'delivery_fee', 'over_price']]
-                    display_df.columns = ['부서', '성함', '메뉴', '음식값', '배달비', '개인부담금']
-                    
-                    st.table(display_df)
-                    
-                    # 차수별 합계 요약 (선택 사항)
-                    total_sum = batch_df['total_price'].sum() + batch_df['delivery_fee'].sum()
-                    st.caption(f"💰 {batch} 총결제액: {total_sum:,}원")
-                    st.write("") # 간격 띄우기
+                st.markdown(f"#### 🏷️ {batch}")
+                batch_df = done[done['batch_id'] == batch].copy()
+                display_df = batch_df[['department', 'user_name', 'items', 'total_price', 'delivery_fee', 'over_price']]
+                display_df.columns = ['부서', '성함', '메뉴', '음식값', '배달비', '개인부담금']
+                st.table(display_df)
+                
+                total_sum = batch_df['total_price'].sum() + batch_df['delivery_fee'].sum()
+                st.caption(f"💰 {batch} 총결제액: {total_sum:,}원")
 
+    # 4. [추가] 데이터 백업 (CSV 다운로드) - Reboot 대비용
+    st.divider()
+    st.subheader("📥 데이터 백업")
+    full_data = pd.read_sql("SELECT * FROM orders ORDER BY order_date DESC", conn)
+    
+    if not full_data.empty:
+        csv_data = full_data.to_csv(index=False).encode('utf-8-sig')
+        st.download_button(
+            label="📥 전체 주문 내역 CSV 다운로드 (백업용)",
+            data=csv_data,
+            file_name=f"orders_backup_{today_str}.csv",
+            mime="text/csv",
+            use_container_width=True
+        )
+    
     conn.close()
-
+    
 # --- [Tab 3: 지난 기록] ---
 with tab3:
     search_date = st.date_input("날짜 선택", datetime.date.today())
@@ -228,4 +233,5 @@ with tab3:
     else:
         st.write("해당 날짜의 기록이 없습니다.")
     conn.close()
+
 
