@@ -60,60 +60,72 @@ st.markdown(f"### 📅 오늘은 **{today_str}** 입니다.")
 tab1, tab2, tab3 = st.tabs(["🍴 맛있는 주문", "📋 관리자 데스크", "📜 지난 기록"])
 
 # --- [Tab 1: 주문하기] ---
+# --- [Tab 1: 주문하기] ---
 with tab1:
-    st.info("💡 부서 → 이름 → 식당 순으로 선택 후 주문하세요. (SQLite DB 적용 중)")
-    
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        dept = st.selectbox("🏢 부서 선택", ["--- 부서 선택 ---"] + sorted(staff_df['department'].unique().tolist()))
-    with col2:
-        names = ["--- 이름 선택 ---"] + sorted(staff_df[staff_df['department']==dept]['name'].tolist()) if dept != "--- 부서 선택 ---" else ["부서 먼저 선택"]
-        user_name = st.selectbox("👤 이름 선택", names)
-    with col3:
-        res_list = ["--- 식당 선택 ---"] + sorted(menu_df['restaurant'].unique().tolist()) if user_name not in ["--- 이름 선택 ---", "부서 먼저 선택"] else ["이름 먼저 선택"]
-        selected_res = st.selectbox("🏪 식당 선택", res_list)
-
-    if selected_res not in ["--- 식당 선택 ---", "이름 먼저 선택"]:
-        res_menu = menu_df[menu_df['restaurant'] == selected_res]
-        menu_options = [f"{row['item_name']} ({row['price']:,}원)" for _, row in res_menu.iterrows()]
-        selected_display = st.multiselect("📝 메뉴 선택", menu_options)
+    if staff_df.empty or menu_df.empty:
+        st.error("🚨 staff.csv 또는 menu.csv 파일을 찾을 수 없습니다. GitHub에 파일이 업로드되었는지 확인해주세요.")
+    else:
+        st.info("💡 부서 → 이름 → 식당 순으로 선택 후 주문하세요.")
         
-       if selected_display and st.button("🚀 주문 확정하기", type="primary", use_container_width=True):
-            try:
-                import time # 시간 지연을 위해 상단에 없다면 추가
-                
-                conn = get_db_connection()
-                # 1. 중복 체크
-                existing = pd.read_sql("SELECT * FROM orders WHERE order_date=? AND user_name=?", conn, params=(today_str, user_name))
-                
-                if not existing.empty:
-                    st.error("❌ 이미 오늘 주문하셨습니다!")
-                else:
-                    # 2. 데이터 계산 및 저장
-                    total_food = sum([int(s.split('(')[1].replace('원)', '').replace(',', '')) for s in selected_display])
-                    items_str = ", ".join([s.split(' (')[0] for s in selected_display])
-                    order_id = str(datetime.datetime.now().timestamp())
-                    
-                    cur = conn.cursor()
-                    cur.execute("INSERT INTO orders (id, order_date, department, user_name, restaurant, items, total_price) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                                (order_id, today_str, dept, user_name, selected_res, items_str, total_food))
-                    conn.commit()
-                    
-                    # 3. 🎉 풍선 효과와 성공 메시지
-                    st.balloons()
-                    st.success(f"✅ {user_name}님, 주문이 성공적으로 완료되었습니다!")
-                    st.info("💡 잠시 후 다음 사람을 위해 메뉴가 초기화됩니다.")
-                    
-                    # 4. 풍선을 잠시 구경할 시간(1.5초)을 준 뒤 화면 초기화
-                    time.sleep(1.5)
-                    
-                    # 5. 캐시를 비우고 화면을 새로고침하여 모든 선택 박스를 초기화
-                    st.rerun()
-                
-                conn.close()
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            dept_options = sorted(staff_df['department'].unique().tolist())
+            dept = st.selectbox("🏢 부서 선택", ["--- 부서 선택 ---"] + dept_options)
+        
+        with col2:
+            if dept != "--- 부서 선택 ---":
+                names = sorted(staff_df[staff_df['department']==dept]['name'].tolist())
+                user_name = st.selectbox("👤 이름 선택", ["--- 이름 선택 ---"] + names)
+            else:
+                user_name = st.selectbox("👤 이름 선택", ["부서 먼저 선택"])
+        
+        with col3:
+            if user_name not in ["--- 이름 선택 ---", "부서 먼저 선택"]:
+                res_options = sorted(menu_df['restaurant'].unique().tolist())
+                selected_res = st.selectbox("🏪 식당 선택", ["--- 식당 선택 ---"] + res_options)
+            else:
+                selected_res = st.selectbox("🏪 식당 선택", ["이름 먼저 선택"])
 
-            except Exception as e:
-                st.error(f"🚨 주문 저장 중 오류가 발생했습니다: {e}")
+        # 여기서부터 들여쓰기가 매우 중요합니다! (모두 한 칸씩 안으로)
+        if selected_res not in ["--- 식당 선택 ---", "이름 먼저 선택"]:
+            res_menu = menu_df[menu_df['restaurant'] == selected_res]
+            menu_options = [f"{row['item_name']} ({row['price']:,}원)" for _, row in res_menu.iterrows()]
+            selected_display = st.multiselect("📝 메뉴 선택", menu_options)
+            
+            # 이 아래 if문은 위 selected_display와 왼쪽 끝 세로줄이 똑같아야 합니다.
+            if selected_display and st.button("🚀 주문 확정하기", type="primary", use_container_width=True):
+                try:
+                    import time
+                    conn = get_db_connection()
+                    
+                    # 중복 체크
+                    existing = pd.read_sql("SELECT * FROM orders WHERE order_date=? AND user_name=?", conn, params=(today_str, user_name))
+                    
+                    if not existing.empty:
+                        st.error("❌ 이미 오늘 주문하셨습니다!")
+                    else:
+                        # 데이터 계산 및 저장
+                        total_food = sum([int(s.split('(')[1].replace('원)', '').replace(',', '')) for s in selected_display])
+                        items_str = ", ".join([s.split(' (')[0] for s in selected_display])
+                        order_id = str(datetime.datetime.now().timestamp())
+                        
+                        cur = conn.cursor()
+                        cur.execute("INSERT INTO orders (id, order_date, department, user_name, restaurant, items, total_price) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                                    (order_id, today_str, dept, user_name, selected_res, items_str, total_food))
+                        conn.commit()
+                        
+                        # 🎉 풍선 효과와 성공 메시지
+                        st.balloons()
+                        st.success(f"✅ {user_name}님, 주문 완료!")
+                        
+                        # 잠시 대기 후 초기화 (rerun)
+                        time.sleep(1.5)
+                        st.rerun()
+                    
+                    conn.close()
+
+                except Exception as e:
+                    st.error(f"🚨 오류 발생: {e}")
 
 # --- [Tab 2: 관리자 데스크] ---
 with tab2:
@@ -216,3 +228,4 @@ with tab3:
     else:
         st.write("해당 날짜의 기록이 없습니다.")
     conn.close()
+
