@@ -132,18 +132,29 @@ with tab2:
                     
                     b_col1, b_col2 = st.columns(2)
                     with b_col1:
+                       # --- Tab 2 내부 [✅ 선택 확정] 버튼 클릭 시 로직 ---
                         if st.button(f"✅ {res} 선택 확정", key=f"conf_{res}"):
                             if to_action:
                                 cur = conn.cursor()
-                                # 차수(batch_id) 계산
                                 done_batches = today_data[today_data['status']=='주문완료']['batch_id'].unique()
                                 b_id = f"{len(done_batches)+1}차({res})"
+                                
                                 for tid in to_action:
-                                    # 초과금 계산 (음식값+배달비 - 9000)
-                                    row_data = res_orders[res_orders['id'] == tid].iloc[0]
-                                    over = max(0, (row_data['total_price'] + per_fee) - 9000)
-                                    cur.execute("UPDATE orders SET status='주문완료', batch_id=?, delivery_fee=?, over_price=? WHERE id=?", (b_id, per_fee, over, tid))
+                                    # [수정 포인트] .item()을 사용하여 Series가 아닌 단일 정수값으로 가져옵니다.
+                                    selected_row = res_orders[res_orders['id'] == tid]
+                                    food_price = int(selected_row['total_price'].item()) # 이 부분!
+                                    
+                                    # 개인부담금 계산: (음식값 + 내 배달비) - 9000원 지원금
+                                    over = max(0, (food_price + per_fee) - 9000)
+                                    
+                                    cur.execute("""
+                                        UPDATE orders 
+                                        SET status='주문완료', batch_id=?, delivery_fee=?, over_price=? 
+                                        WHERE id=?
+                                    """, (b_id, per_fee, int(over), tid)) # int로 한 번 더 감싸서 안전하게 저장
+                                    
                                 conn.commit()
+                                st.success(f"{res} 확정 완료!")
                                 st.rerun()
                     with b_col2:
                         if st.button(f"🗑️ {res} 선택 삭제", key=f"del_{res}"):
@@ -189,3 +200,4 @@ with tab3:
     else:
         st.write("해당 날짜의 기록이 없습니다.")
     conn.close()
+
