@@ -104,11 +104,23 @@ with tab2:
             st.markdown("#### ⏳ 확정 대기 목록")
             for res in pending['restaurant'].unique():
                 res_orders = pending[pending['restaurant'] == res]
-                with st.expander(f"📍 {res} (대기 {len(res_orders)}건)", expanded=True):
+               with st.expander(f"📍 {res} (대기 {len(res_orders)}건)", expanded=True):
+                    # --- 배달비 계산 로직 교체 시작 ---
+                    order_count = len(res_orders)
                     food_sum = res_orders['total_price'].sum()
-                    d_fee = 4000 if res != '장강' else 0
-                    if res == '오르드브' and food_sum >= 50000: d_fee = 0
-                    per_fee = d_fee // len(res_orders)
+                    
+                    if res == '아말피':
+                        d_fee = 3000 if order_count == 1 else 4000
+                    elif res == '오르드브':
+                        d_fee = 2000 if order_count == 1 else 4000
+                        if food_sum >= 50000: d_fee = 0  # 5만원 이상 무료 조건 유지
+                    elif res == '장강':
+                        d_fee = 0
+                    else:
+                        d_fee = 4000 # 기타 식당 기본값
+                    
+                    per_fee = d_fee // order_count
+                    # --- 배달비 계산 로직 교체 끝 ---
                     
                     st.write(f"배달비 총 {d_fee:,}원 (1인당 {per_fee:,}원)")
                     
@@ -193,5 +205,6 @@ with tab3:
         st.metric("총 결제 금액", f"{history['total_price'].sum() + history['delivery_fee'].sum():,}원")
     else:
         st.warning("기록이 없습니다.")
+
 
 
