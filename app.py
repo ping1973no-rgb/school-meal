@@ -74,28 +74,50 @@ with tab1:
         menu_options = [f"{row['item_name']} ({row['price']:,}원)" for _, row in res_menu.iterrows()]
         selected_display = st.multiselect("📝 메뉴 선택", menu_options)
         
-        if selected_display and st.button("🚀 주문 확정하기", type="primary", use_container_width=True):
-            df = get_db_data()
-            if not df[(df['order_date'] == today_str) & (df['user_name'] == user_name)].empty:
-                st.error("❌ 이미 오늘 주문하셨습니다!")
-            else:
+       if selected_display and st.button("🚀 주문 확정하기", type="primary", use_container_width=True):
+            try:
+                import time # 시간 지연을 위해 추가
+                
+                # 1. 최신 데이터 읽기 (캐시 없이 강제 로드)
+                df = conn_gs.read(worksheet="orders", ttl=0)
+                
+                # 2. 새 행 생성
                 total_food = sum([int(s.split('(')[1].replace('원)', '').replace(',', '')) for s in selected_display])
                 new_row = pd.DataFrame([{
                     "id": str(datetime.datetime.now().timestamp()),
-                    "order_date": today_str, "department": dept, "user_name": user_name,
-                    "restaurant": selected_res, "items": ", ".join([s.split(' (')[0] for s in selected_display]),
-                    "total_price": total_food, "delivery_fee": 0, "over_price": 0, "status": "주문대기", "batch_id": ""
+                    "order_date": today_str, 
+                    "department": dept, 
+                    "user_name": user_name,
+                    "restaurant": selected_res, 
+                    "items": ", ".join([s.split(' (')[0] for s in selected_display]),
+                    "total_price": total_food, 
+                    "delivery_fee": 0, 
+                    "over_price": 0, 
+                    "status": "주문대기", 
+                    "batch_id": ""
                 }])
                 
-                # 데이터 전송
-                conn_gs.update(worksheet="orders", data=pd.concat([df, new_row], ignore_index=True))
+                # 3. 데이터 합치기
+                updated_df = pd.concat([df, new_row], ignore_index=True)
                 
-                # 🎉 성공 메시지를 띄우고 화면을 초기화합니다.
-                st.success(f"🎉 주문이 완료되었습니다!")
+                # 4. [핵심 수정] 구글 시트 업데이트 전 아주 잠깐(0.5초) 대기
+                # 구글 API가 연속 요청을 거절하는 것을 방지합니다.
+                time.sleep(0.5)
+                
+                # 5. 시트 업데이트
+                conn_gs.update(worksheet="orders", data=updated_df)
+                
+                st.success(f"🎉 {user_name}님, 주문 완료!")
                 st.balloons()
                 
-                # [핵심] 이 한 줄이 모든 선택 항목을 초기화(새로고침)합니다.
+                # 6. 다음 사람을 위해 1초 대기 후 초기화
+                time.sleep(1)
                 st.rerun()
+
+            except Exception as e:
+                st.error("🚨 주문 처리 중 일시적인 오류가 발생했습니다.")
+                st.write(f"상세 원인: {e}")
+                st.info("💡 3초만 기다렸다가 다시 [주문 확정하기]를 눌러보세요.")
 
 # --- [Tab 2: 관리자 데스크] ---
 with tab2:
@@ -216,6 +238,7 @@ with tab3:
         st.metric("총 결제 금액", f"{history['total_price'].sum() + history['delivery_fee'].sum():,}원")
     else:
         st.warning("기록이 없습니다.")
+
 
 
 
