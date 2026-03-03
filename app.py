@@ -81,10 +81,12 @@ with tab1:
             else:
                 total_food = sum([int(s.split('(')[1].replace('원)', '').replace(',', '')) for s in selected_display])
                 new_row = pd.DataFrame([{
-                    "id": len(df) + 1, "order_date": today_str, "department": dept, "user_name": user_name,
+                    "id": str(datetime.datetime.now().timestamp()),
+                    "order_date": today_str, "department": dept, "user_name": user_name,
                     "restaurant": selected_res, "items": ", ".join([s.split(' (')[0] for s in selected_display]),
                     "total_price": total_food, "delivery_fee": 0, "over_price": 0, "status": "주문대기", "batch_id": ""
                 }])
+                
                 # 데이터 전송
                 conn_gs.update(worksheet="orders", data=pd.concat([df, new_row], ignore_index=True))
                 
@@ -214,6 +216,7 @@ with tab3:
         st.metric("총 결제 금액", f"{history['total_price'].sum() + history['delivery_fee'].sum():,}원")
     else:
         st.warning("기록이 없습니다.")
+
 
 
 
