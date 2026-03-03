@@ -98,29 +98,32 @@ with tab2:
     if today_data.empty:
         st.info("오늘 접수된 주문이 없습니다.")
     else:
-        # 1. 미확정 대기 내역
+        # 1. 미확정 대기 내역 처리 부분입니다.
         pending = today_data[today_data['status'] == '주문대기']
         if not pending.empty:
             st.markdown("#### ⏳ 확정 대기 목록")
             for res in pending['restaurant'].unique():
                 res_orders = pending[pending['restaurant'] == res]
-               with st.expander(f"📍 {res} (대기 {len(res_orders)}건)", expanded=True):
-                    # --- 배달비 계산 로직 교체 시작 ---
+                
+                # --- 이 아래부분의 들여쓰기를 눈으로 확인해 보세요! ---
+                with st.expander(f"📍 {res} (대기 {len(res_orders)}건)", expanded=True):
                     order_count = len(res_orders)
                     food_sum = res_orders['total_price'].sum()
                     
+                    # 배달비 계산 로직
                     if res == '아말피':
                         d_fee = 3000 if order_count == 1 else 4000
                     elif res == '오르드브':
                         d_fee = 2000 if order_count == 1 else 4000
-                        if food_sum >= 50000: d_fee = 0  # 5만원 이상 무료 조건 유지
+                        if food_sum >= 50000: d_fee = 0
                     elif res == '장강':
                         d_fee = 0
                     else:
-                        d_fee = 4000 # 기타 식당 기본값
+                        d_fee = 4000
                     
                     per_fee = d_fee // order_count
-                    # --- 배달비 계산 로직 교체 끝 ---
+                    st.write(f"배달비 총 {d_fee:,}원 (1인당 {per_fee:,}원 분담)")
+                    # --- 이 위까지 들여쓰기가 일정해야 합니다 ---
                     
                     st.write(f"배달비 총 {d_fee:,}원 (1인당 {per_fee:,}원)")
                     
@@ -205,6 +208,7 @@ with tab3:
         st.metric("총 결제 금액", f"{history['total_price'].sum() + history['delivery_fee'].sum():,}원")
     else:
         st.warning("기록이 없습니다.")
+
 
 
 
