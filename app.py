@@ -137,7 +137,7 @@ with tab2:
         # 2. 확정 대기 중인 주문 처리
         pending = today_data[today_data['status'] == '주문대기']
         if not pending.empty:
-            st.markdown("#### ⏳ 확정 대기 목록-주문하는 사람이 확정합니다.")
+            st.markdown("#### ⏳ 확정 대기 목록-교무실 관리자가 주문하면서 확정합니다.")
             for res in pending['restaurant'].unique():
                 res_orders = pending[pending['restaurant'] == res]
                 with st.expander(f"📍 {res} (대기 {len(res_orders)}건)", expanded=True):
@@ -231,6 +231,7 @@ with tab3:
     else:
         st.write("해당 날짜의 기록이 없습니다.")
     conn.close()
+
 
 
 
