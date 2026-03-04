@@ -56,7 +56,7 @@ def init_db():
 init_db()
 
 # 탭 구성 시작...
-tab1, tab2, tab3 = st.tabs(["🍴 맛있는 주문", "📋 관리자 데스크", "📜 지난 기록"])
+tab1, tab2, tab3 = st.tabs(["🍴 맛있는 주문", "📋 신청 현황", "📜 지난 기록"])
 
 # --- [Tab 1: 주문하기] ---
 with tab1:
@@ -231,6 +231,7 @@ with tab3:
     else:
         st.write("해당 날짜의 기록이 없습니다.")
     conn.close()
+
 
 
 
