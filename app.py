@@ -88,7 +88,7 @@ with tab1:
         if selected_res not in ["--- 식당 선택 ---", "이름 먼저 선택"]:
             res_menu = menu_df[menu_df['restaurant'] == selected_res]
             menu_options = [f"{row['item_name']} ({row['price']:,}원)" for _, row in res_menu.iterrows()]
-            selected_display = st.multiselect("📝 메뉴 선택", menu_options)
+            selected_display = st.multiselect("📝 메뉴 선택- 2개선택가능, 1개선택 후 다시 클릭", menu_options)
             
             # 이 아래 if문은 위 selected_display와 왼쪽 끝 세로줄이 똑같아야 합니다.
             if selected_display and st.button("🚀 주문 확정하기", type="primary", use_container_width=True):
@@ -231,6 +231,7 @@ with tab3:
     else:
         st.write("해당 날짜의 기록이 없습니다.")
     conn.close()
+
 
 
 
