@@ -63,7 +63,7 @@ with tab1:
     if staff_df.empty or menu_df.empty:
         st.error("🚨 staff.csv 또는 menu.csv 파일을 찾을 수 없습니다. GitHub에 파일이 업로드되었는지 확인해주세요.")
     else:
-        st.info("💡 부서 → 이름 → 식당 순으로 선택 후 주문하세요.\n\n 💡 매일 16:00시에 일괄주문합니다. 그외는 개별 주문\n\n 💡 초근신청 확인(1시간 이상 근무 하실분), 배송료 고려 1인 9,000원이내\n\n 💡배송료는 업체마다 다름. 오르드브와 아말피 단체 4,000원, 장강대신 비밀기지로 업체 바꿀예정. , 1인 주문시 2,000~3,000원 배달비 필요 단체주문 이득 ")
+        st.info("💡 부서 → 이름 → 식당 순으로 선택 후 주문하세요.\n\n 💡 매일 16:00시에 일괄주문합니다. 그외는 개별 주문\n\n 💡 초근신청 확인(1시간 이상 근무 하실분), 배송료 고려 1인 9,000원이내\n\n 💡배송료는 업체마다 다름. 오르드브와 아말피 단체 4,000원, 비밀기지 무료. , 1인 주문시 2,000~3,000원 배달비 필요 단체주문이 이득 ")
         
         col1, col2, col3 = st.columns(3)
         with col1:
@@ -80,7 +80,7 @@ with tab1:
         with col3:
             if user_name not in ["--- 이름 선택 ---", "부서 먼저 선택"]:
                 res_options = sorted(menu_df['restaurant'].unique().tolist())
-                selected_res = st.selectbox("🏪 식당 선택", ["--- 식당 선택_장강은 이용 안하기로 ---"] + res_options)
+                selected_res = st.selectbox("🏪 식당 선택", ["--- 식당 선택_비밀기지는 3월 9일부터 주문가능 ---"] + res_options)
             else:
                 selected_res = st.selectbox("🏪 식당 선택", ["이름 먼저 선택"])
 
@@ -147,7 +147,7 @@ with tab2:
                     # 배달비 로직 (아말피, 오르드브 등 식당별 조건)
                     if res == '아말피': d_fee = 3000 if order_count == 1 else 4000
                     elif res == '오르드브': d_fee = 2000 if order_count == 1 else 4000
-                    elif res == '장강': d_fee = 0
+                    elif res == '비밀기지': d_fee = 0
                     else: d_fee = 4000
                     if res == '오르드브' and food_sum >= 50000: d_fee = 0
                     
@@ -231,7 +231,6 @@ with tab3:
     else:
         st.write("해당 날짜의 기록이 없습니다.")
     conn.close()
-
 
 
 
