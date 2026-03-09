@@ -80,7 +80,7 @@ with tab1:
         with col3:
             if user_name not in ["--- 이름 선택 ---", "부서 먼저 선택"]:
                 res_options = sorted(menu_df['restaurant'].unique().tolist())
-                selected_res = st.selectbox("🏪 식당 선택", ["--- 식당 선택_비밀기지는 3월 9일부터 주문가능 ---"] + res_options)
+                selected_res = st.selectbox("🏪 식당 선택", ["--- 식당 선택_비밀기지 주문가능 ---"] + res_options)
             else:
                 selected_res = st.selectbox("🏪 식당 선택", ["이름 먼저 선택"])
 
@@ -231,6 +231,7 @@ with tab3:
     else:
         st.write("해당 날짜의 기록이 없습니다.")
     conn.close()
+
 
 
 
